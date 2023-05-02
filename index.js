@@ -9,7 +9,7 @@ require('dotenv').config();
 const PORT = process.env.port || 8001;
 const app = express();
 
-cron.schedule('* * * * *', async () => {
+cron.schedule('30 10,14 * * *', async () => {
   console.log('cron is working');
 });
 
@@ -79,16 +79,16 @@ async function scrapChannel(url) {
 
       const handlebarOptions = {
         viewEngine: {
-          extName: '.hbs',
+          extName: '.handlebars',
           layoutsDir: path.resolve('./views'),
           partialsDir: path.resolve('./views'),
           defaultLayout: false,
         },
         viewPath: path.resolve('./views'),
-        extName: '.hbs',
+        extName: '.handlebars',
       };
 
-      transporter.use('compiler', hbs(handlebarOptions));
+      transporter.use('compile', hbs(handlebarOptions));
 
       const mailOptions = {
         from: process.env.GID,
