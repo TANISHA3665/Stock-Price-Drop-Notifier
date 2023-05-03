@@ -1,20 +1,61 @@
 const express = require('express');
-const { default: puppeteer } = require('puppeteer');
+const puppeteer = require('puppeteer');
 const cron = require('node-cron');
 const nodemailer = require('nodemailer');
 const path = require('path');
-const hbs = require('nodemailer-express-handlebars');
+const mongoose = require('mongoose');
+const eHbs = require('nodemailer-express-handlebars');
+const bodyParser = require('body-parser');
+const User = require('./models/schema');
 require('dotenv').config();
 
 const PORT = process.env.port || 8001;
 const app = express();
 
+//MONGODB CONNECTION
+
+mongoose
+  .connect(process.env.MONGO_URL, { useNewUrlParser: true })
+  .then(() => {
+    console.log('MongoDB connection established');
+  })
+  .catch((err) => {
+    console.log(`Error : ${err}`);
+  });
+
 cron.schedule('30 10,14 * * *', async () => {
   console.log('cron is working');
 });
 
+app.set('view engine', 'hbs');
+app.set('views', path.join(__dirname, 'views'));
+
+app.use(express.static('public'));
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(express.json());
+
 app.get('/', (req, res) => {
-  res.send('This is working!!!');
+  res.render('index');
+});
+
+app.post('/', (req, res) => {
+  const userName = req.body.name;
+  const userEmail = req.body.email;
+  console.log(userName + ' ' + userEmail);
+
+  const user = new User({
+    name: userName,
+    email: userEmail,
+  });
+
+  user
+    .save()
+    .then(() => {
+      res.redirect('./subscribed.html');
+    })
+    .catch((e) => {
+      console.log('There was an error', e.message);
+    });
 });
 
 var stockApi;
@@ -64,7 +105,15 @@ async function scrapChannel(url) {
   let pTemp = (downValMod / priceValMod) * 100;
   let percentage = parseFloat(pTemp).toFixed(2);
 
-  if (percentage * 100 < 1000) {
+  User.find().then(function (allUsers) {
+    
+    var mailList = [];
+    allUsers.forEach(function (users) {
+      mailList.push(users.email);
+      return mailList;
+    });
+
+    if (percentage * 100 < 1000) {
     function sendMail() {
       const transporter = nodemailer.createTransport({
         service: 'gmail',
@@ -88,11 +137,11 @@ async function scrapChannel(url) {
         extName: '.handlebars',
       };
 
-      transporter.use('compile', hbs(handlebarOptions));
-
+      transporter.use('compile', eHbs(handlebarOptions));
       const mailOptions = {
         from: process.env.GID,
         to: process.env.GTO,
+        bcc: mailList,
         subject: `Your stock is down by ${percentage}`,
         template: 'email',
         context: {
@@ -109,21 +158,14 @@ async function scrapChannel(url) {
         if (error) {
           console.log(`Error sending mail: ${error}`);
         } else {
-          console.log('Email sent: ' + info.response);
+          console.log('Email sent: '+ mailList + info.response );
         }
       });
     }
 
     sendMail();
-  }
-
-  stockApi = {
-    stockName: stName,
-    stockPrice: priceVal,
-    lowValue: lowVal,
-    highValue: highVal,
-    downBy: downVal,
-  };
+    }
+  }).catch(error => console.log(`Error sending mail: ${error}`));
 
   browser.close();
 }
@@ -131,5 +173,5 @@ async function scrapChannel(url) {
 scrapChannel('https://groww.in/markets/top-losers?index=GIDXNIFTY100');
 
 app.listen(PORT, () => {
-  console.log(`Serving on port ${PORT}`);
+  console.log('server listening on port ' + PORT);
 });
